@@ -581,6 +581,7 @@ struct IDLOptions {
     kRust = 1 << 14,
     kKotlin = 1 << 15,
     kSwift = 1 << 16,
+    kOctave = 1 << 17,
     kMAX
   };
 
@@ -1069,6 +1070,11 @@ extern bool GenerateSwift(const Parser &parser, const std::string &path,
 extern std::string GenerateFBS(const Parser &parser,
                                const std::string &file_name);
 extern bool GenerateFBS(const Parser &parser, const std::string &path,
+                        const std::string &file_name);
+
+// Generate an Octave script from the definitions in the Parser object.
+// See idl_gen_cpp.
+extern bool GenerateOctave(const Parser &parser, const std::string &path,
                         const std::string &file_name);
 
 // Generate a make rule for the generated JavaScript or TypeScript code.

@@ -110,6 +110,8 @@ int main(int argc, const char *argv[]) {
     { flatbuffers::GenerateSwift, nullptr, "--swift", "swift", true,
       flatbuffers::GenerateSwiftGRPC, flatbuffers::IDLOptions::kSwift,
       "Generate Swift files for tables/structs", nullptr },
+    { flatbuffers::GenerateOctave, nullptr, "--octave", "GNU Octave", true,
+      nullptr, flatbuffers::IDLOptions::kOctave}
   };
 
   flatbuffers::FlatCompiler::InitParams params;
