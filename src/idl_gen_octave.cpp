@@ -31,6 +31,14 @@ Generate Octave script from the idl / schema:
 namespace flatbuffers {
 namespace octave {
 const std::string nl = "\n";
+const std::string tb = "\t";
+inline std::string tabs(size_t N)
+{
+  std::string s;
+  for (size_t n = 0U; n != N; ++n)
+    s += tb;
+  return s;
+}
 // Extension of IDLOptions for cpp-generator:
 struct IDLOptionsOctave : public IDLOptions {
   // All fields start with 'oct_' prefix to distuinguish from the base options
@@ -123,6 +131,36 @@ class OctaveGenerator : public BaseGenerator {
     return "VT_" + uname;
   }
 
+  // Generate .m to read the specified number of bytes out of b.
+  std::string GenReadBytesAtIndex(const std::string& idx, unsigned num_bytes)
+  {
+    if (num_bytes == 0U)
+      return "[]";
+    return "b(" + idx + ":" + idx + " + " + NumToString(num_bytes - 1U) + ")";
+  }
+  // Generate .m for a function that reads a uint32 from the specified index:
+  std::string GenReadUint32(const std::string& idx)
+  {
+    // Note: ReadUint32 is a function that will be implemented in the Octave flatbuffers library.
+    // We extract the 4 bytes before passing to the function as Octave doesn't have pass by pointer
+    // and I don't want to be passing a potentially large b around the whole time
+    return "ReadUint32(" + GenReadBytesAtIndex(idx, 4U) + ")";
+  }
+  // Generate .m for a function that reads an int32 from the specified index
+  std::string GenReadInt32(const std::string& idx)
+  {
+    return "ReadInt32(" + GenReadBytesAtIndex(idx, 4U) + ")";
+  }
+  // Generate .m for a function that reads a uint16 from the specified index
+  std::string GenReadUint16(const std::string& idx)
+  {
+    return "ReadUint16(" + GenReadBytesAtIndex(idx, 4U) + ")";
+  }
+
+  std::string GenIdxFieldNameOff(const std::string& field_name) { return "idx_" + field_name + "_off"; }
+  std::string GenIdxFieldName(const std::string& field_name) { return "idx_" + field_name; }
+  std::string GenLenFieldName(const std::string& field_name) { return "len_" + field_name; }
+
   // Generate a member, including default values
   void GenMember(const FieldDef& field, const std::string& parent) {
     if (!field.deprecated &&  // Deprecated fields not accessible
@@ -155,6 +193,12 @@ class OctaveGenerator : public BaseGenerator {
     return unpack;
   }
   // Return an unpack string for the type
+  // field name is the member we are unpacking
+  // struct_field is the output field of the struct we are unpackint to, e.g. MsgRx.m_member.
+  // The idx_FieldName_off has already been generated
+  // So what this function generates is something like:
+  // ... unpacking code...
+  // MsgRx.m_member = ... unpacking code ...
   std::string GenUnpackStringForField(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
     if (IsScalar(type.base_type))
@@ -167,13 +211,14 @@ class OctaveGenerator : public BaseGenerator {
       return unpack;
     }
     else if (type.base_type == BASE_TYPE_STRING) {
-      std::string FNRO = field_name + "RO";   // Field Name Root Offset
-      std::string idxF = "idx" + field_name;
-      std::string unpack = FNRO + " = typecast(b(" + idxF + ":" + idxF + " + 3), \"uint32\")" + nl;
-      std::string fieldPos = field_name + "Pos";
-      unpack += fieldPos + " = " + idxF + " + " + FNRO + nl;
-      unpack += field_name + "_length =  typecast(b(" + fieldPos + ":" + fieldPos + " + 3), \"uint32\")" + nl;
-      unpack += struct_field + " = cast(b(" + fieldPos + " + 4:" + fieldPos + " + 4 + " + field_name + "_length), \"char\")'" + nl;
+      // index of the string member offset in the table:
+      std::string unpack;
+      std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
+      std::string idxField = GenIdxFieldName(field_name);
+      unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
+      unpack += idxField + " = " + idxFieldNameOff + " + offOuter" + nl;
+      unpack += GenLenFieldName(field_name) + " = " + GenReadUint32(idxField) + nl;
+      unpack += struct_field + " = cast(b(" + idxField + " + 4:" + idxField + " + 4 + " + GenLenFieldName(field_name) + "), \"char\")'" + nl;
       return unpack;
     }
     else {
@@ -240,7 +285,9 @@ class OctaveGenerator : public BaseGenerator {
 
         code_ += "if(FieldOffsets(" + NumToString(K) + ") ~= 0)" + nl;
         //code_ += GenTypeGet()
-        code_ += "idx" + field.name + " = idxRT + uint32(FieldOffsets(" + NumToString(K) + "))" + nl;
+        // idx_FieldName_off, index of the field name offset in the root table
+        code_ += GenIdxFieldNameOff(field.name) + " = idxRT + uint32(FieldOffsets(" + NumToString(K) + "))" + nl;
+        // Generate code for where to put the field in the struct that we are unpacking to:
         std::string struct_field = struct_name + ".(VT.Fields{" + NumToString(K) + "})";
         code_ += GenUnpackStringForField(field.name, struct_field, field.value.type) + nl;
         
