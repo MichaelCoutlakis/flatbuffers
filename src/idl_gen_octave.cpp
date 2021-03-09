@@ -21,6 +21,7 @@ Generate Octave script from the idl / schema:
 */
 
 #include <unordered_set>
+#include <iostream>
 
 #include "flatbuffers/code_generators.h"
 #include "flatbuffers/flatbuffers.h"
@@ -119,6 +120,9 @@ class OctaveGenerator : public BaseGenerator {
     return EscapeKeyword(def.name);
   }
 
+  // Wrap the string in quotation marks
+  std::string Quote(const std::string& str) { return "\"" + str + "\""; }
+
   static std::string NativeName(const std::string &name, const StructDef *sd,
                                 const IDLOptions &opts) {
     return sd && !sd->fixed ? opts.object_prefix + name + opts.object_suffix
@@ -157,9 +161,16 @@ class OctaveGenerator : public BaseGenerator {
     return "ReadUint16(" + GenReadBytesAtIndex(idx, 4U) + ")";
   }
 
+  // Generate .m for something like typecast(b(idx:idx + idx_add), type_to)
+  std::string GenTypecast(const std::string& idx, const std::string& idx_add, const std::string& type_to)
+  {
+    return "typecast(b(" + idx + ":" + idx + " + " + idx_add + ")," + Quote(type_to) + ")";
+  }
+
   std::string GenIdxFieldNameOff(const std::string& field_name) { return "idx_" + field_name + "_off"; }
   std::string GenIdxFieldName(const std::string& field_name) { return "idx_" + field_name; }
   std::string GenLenFieldName(const std::string& field_name) { return "len_" + field_name; }
+  std::string GenUnpackFunctionName(const std::string& type_name) { return type_name + "_Unpack"; }
 
   // Generate a member, including default values
   void GenMember(const FieldDef& field, const std::string& parent) {
@@ -180,18 +191,94 @@ class OctaveGenerator : public BaseGenerator {
     const auto native_name = NativeName(Name(struct_def), &struct_def, opts_);
   }
 
+  std::string GetOctaveType(const BaseType& type)
+  {
+    std::map<flatbuffers::BaseType, std::string> mapCppOctave = {
+      /* This is following the ordering of types listed under "cast" in Octave's pdf manual. Also see FLATBUFFERS_GEN_TYPES_SCALAR */
+      {BASE_TYPE_DOUBLE, "double"},
+      {BASE_TYPE_FLOAT, "single"},
+      {BASE_TYPE_BOOL, "logical"},
+      {BASE_TYPE_CHAR, "char"},
+      //{BASE_TYPE_, "int8"},
+      {BASE_TYPE_SHORT, "int16"},
+      {BASE_TYPE_INT, "int32"},
+      {BASE_TYPE_LONG, "int64"},
+      {BASE_TYPE_UCHAR, "uint8"},
+      {BASE_TYPE_UTYPE, "uint8"},
+      {BASE_TYPE_USHORT, "uint16"},
+      {BASE_TYPE_UINT, "uint32"},
+      {BASE_TYPE_ULONG, "uint64"},
+    };
+    std::string octave_type = mapCppOctave[type];
+    return octave_type;
+  }
 
   // Return an unpack string for the basic type
   std::string GenUnpackStringBasicField(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
-    std::map<flatbuffers::BaseType, std::string> mapCppOctave = {
-      {BASE_TYPE_FLOAT, "single"},
-    {BASE_TYPE_INT, "int32"},
-    };
-    std::string idxField = "idx" + field_name;
-    std::string unpack = struct_field + " = typecast(b(" + idxField + ":" + idxField + " + " + NumToString(SizeOf(type.base_type) - 1) + "), " + "\"" + mapCppOctave[type.base_type] + "\")";
+    //std::map<flatbuffers::BaseType, std::string> mapCppOctave = {
+    //  /* This is following the ordering of types listed under "cast" in Octave's pdf manual. Also see FLATBUFFERS_GEN_TYPES_SCALAR */
+    //  {BASE_TYPE_DOUBLE, "double"},
+    //  {BASE_TYPE_FLOAT, "single"},
+    //  {BASE_TYPE_BOOL, "logical"},
+    //  {BASE_TYPE_CHAR, "char"},
+    //  //{BASE_TYPE_, "int8"},
+    //  {BASE_TYPE_SHORT, "int16"},
+    //  {BASE_TYPE_INT, "int32"},
+    //  {BASE_TYPE_LONG, "int64"},
+    //  {BASE_TYPE_UCHAR, "uint8"},
+    //  {BASE_TYPE_UTYPE, "uint8"},
+    //  {BASE_TYPE_USHORT, "uint16"},
+    //  {BASE_TYPE_UINT, "uint32"},
+    //  {BASE_TYPE_ULONG, "uint64"},
+    //};
+    std::string OctaveType = GetOctaveType(type.base_type);
+
+    if (OctaveType.empty())
+      std::cout << "Warning: Could not find base type for " << type.base_type << " field name " << field_name << std::endl;
+    // Note: The index has already been named as idx_Name_off in GenTable. For inline types it's an absolute index, but generate the same name (with an _off) to match GenTable
+    std::string idxField = GenIdxFieldNameOff(field_name);
+    std::string unpack = struct_field + " = typecast(b(" + idxField + ":" + idxField + " + " + NumToString(SizeOf(type.base_type) - 1) + "), " + Quote(OctaveType) + ")";
     return unpack;
   }
+
+  std::string GenUnpackVector(const std::string& field_name, const std::string& struct_field, const Type& type)
+  {
+    std::string unpack;
+    auto vector_type = type.VectorType();
+    switch (vector_type.base_type) {
+    case BASE_TYPE_STRING: {
+      int bs = 3;
+    }
+    case BASE_TYPE_STRUCT: {
+      int bs = 3;
+    }
+    default: {
+      //unpack += GenFieldOffsetName(field_name) + " = idxRT"
+      std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
+      std::string idxField = GenIdxFieldName(field_name);
+      std::string idxVecLen = GenLenFieldName(field_name);
+      std::string octave_type = GetOctaveType(type.element);
+      if (octave_type.empty())
+        std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
+      
+      unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
+      unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
+      unpack += idxVecLen + " = " + GenReadUint32(idxField) + nl;
+      unpack += struct_field + " = " + GenTypecast(idxField + " + 4", idxVecLen + "*4 - 1", octave_type) + nl;
+    }
+    }
+    return unpack;
+  }
+
+  std::string GenUnpackStruct(const std::string& field_name, const std::string& struct_field, const Type& type)
+  {
+    std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
+    std::string unpack;
+    unpack += struct_field + " = " + GenUnpackFunctionName(struct_name) + "(b, " + GenIdxFieldNameOff(field_name) + ")";
+    return unpack;
+  }
+
   // Return an unpack string for the type
   // field name is the member we are unpacking
   // struct_field is the output field of the struct we are unpackint to, e.g. MsgRx.m_member.
@@ -207,8 +294,7 @@ class OctaveGenerator : public BaseGenerator {
       auto element_type = type.VectorType();
     }
     else if (IsVector(type)) {
-      std::string unpack = "warning(\"Vector not implemented\")" + nl;
-      return unpack;
+      return GenUnpackVector(field_name, struct_field, type);
     }
     else if (type.base_type == BASE_TYPE_STRING) {
       // index of the string member offset in the table:
@@ -221,6 +307,12 @@ class OctaveGenerator : public BaseGenerator {
       unpack += struct_field + " = cast(b(" + idxField + " + 4:" + idxField + " + 4 + " + GenLenFieldName(field_name) + "), \"char\")'" + nl;
       return unpack;
     }
+    else if (type.base_type == BASE_TYPE_VECTOR) {
+
+    }
+    else if (type.base_type == BASE_TYPE_STRUCT) {
+      return GenUnpackStruct(field_name, struct_field, type);
+    }
     else {
       // TODO
     }
@@ -230,27 +322,42 @@ class OctaveGenerator : public BaseGenerator {
     GenNativeTable(struct_def); 
 
     std::string struct_name = NativeName(Name(struct_def), &struct_def, opts_);
-    code_ += "function " + struct_name + " = " + struct_name + "_Unpack(b)" + nl;
+    code_ += "function " + struct_name + " = " + GenUnpackFunctionName(struct_name) + "(b, idxBuf)" + nl;
 
+    // Declare struct (empty)
+    code_ += struct_name + " = {};" + nl;
+    /* Offset to the root table: */
+    code_ += "offRT = " + GenReadUint32("idxBuf") + nl;
+
+    /* Root table offset in Octave's index into the bytes: */
+    code_ += "idxRT = offRT + idxBuf" + nl;
+
+    /* Offset to the VT from the RT: */
+    code_ += "offVT = " + GenReadInt32("idxRT") + nl;
+    /* Start of the vtable in Octave's index: */
+    code_ += "idxVT = int32(idxRT) - offVT" + nl;
+    /* Size of the VT: */
+    code_ += "sizeVT = " + GenReadUint16("idxVT") + nl;
+    /* Determine the inline data size and hence the number of fields: */
+    //code_ += "sizeInline = " + GenReadUint16("idxVT + 2") + nl;
+    code_ += "N = int32(sizeVT / 2 - 2)" + nl;
+
+    code_ += "FieldOffsets = typecast(b(idxVT + 4:idxVT + 4 + 2*N - 1), \"uint16\")" + nl;
     // Make sure b is bytes:
   
-    code_ += "% Root Table Offset" + nl;
-    code_ += "RTO = typecast(b(1:4), \"uint32\")" + nl;
+    //code_ += "% Root Table Offset" + nl;
+    //code_ += "RTO = typecast(b(1:4), \"uint32\")" + nl;
 
-    //code_ += "% Read vtable:" + nl;
-    //code_ += "vt_size = typecast(b(4:5), \"uint16\");" + nl;
-    //code_ += "inline_size = typecast(b(6:7), \"uint16\");" + nl;
-
-    code_ += "% This is the root table in Octave's index into the bytes b" + nl;
-    code_ += "idxRT = RTO + 1" + nl;
-    code_ += "% Offset to the vtable used by this table" + nl;
-    code_ += "VTO = typecast(b(idxRT:idxRT + 3), \"int32\")" + nl;
-    // Note the subtraction, see flatbuffers internals
-    code_ += "idxVT = int32(idxRT) - VTO;" + nl;
-    code_ += "vt_size = typecast(b(idxVT:idxVT + 1), \"uint16\")" + nl;
-    code_ += "inline_size = typecast(b(idxVT + 2:idxVT + 3), \"uint16\")" + nl;
-    code_ += "NumFields = int32(vt_size / 2 - 2)" + nl;
-    code_ += "FieldOffsets = typecast(b(idxVT + 4:idxVT + 4 + 2*NumFields - 1), \"uint16\")" + nl;
+    //code_ += "% This is the root table in Octave's index into the bytes b" + nl;
+    //code_ += "idxRT = RTO + 1" + nl;
+    //code_ += "% Offset to the vtable used by this table" + nl;
+    //code_ += "VTO = typecast(b(idxRT:idxRT + 3), \"int32\")" + nl;
+    //// Note the subtraction, see flatbuffers internals
+    //code_ += "idxVT = int32(idxRT) - VTO;" + nl;
+    //code_ += "vt_size = typecast(b(idxVT:idxVT + 1), \"uint16\")" + nl;
+    //code_ += "inline_size = typecast(b(idxVT + 2:idxVT + 3), \"uint16\")" + nl;
+    //code_ += "NumFields = int32(vt_size / 2 - 2)" + nl;
+    //code_ += "FieldOffsets = typecast(b(idxVT + 4:idxVT + 4 + 2*NumFields - 1), \"uint16\")" + nl;
 
 
     // Generate the vtable field ID constants
