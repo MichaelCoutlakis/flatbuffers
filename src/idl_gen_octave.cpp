@@ -1,5 +1,5 @@
 /*
- * Copyright 2032 Michael Coutlakis. All rights reserved.
+ * Copyright 2021 Michael Coutlakis. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -246,28 +246,59 @@ class OctaveGenerator : public BaseGenerator {
   {
     std::string unpack;
     auto vector_type = type.VectorType();
+    std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
+    std::string idxField = GenIdxFieldName(field_name);
+    std::string idxVecLen = GenLenFieldName(field_name);
+    std::string struct_name = type.struct_def ? NativeName(Name(*type.struct_def), type.struct_def, opts_) : "";
+
+    unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
+    unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
+    unpack += idxVecLen + " = " + GenReadUint32(idxField) + nl;
+
+
+    bool bGenForLoop = vector_type.base_type == BASE_TYPE_STRING || vector_type.base_type == BASE_TYPE_STRUCT;
+    if (bGenForLoop) {
+      unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
+      unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
+    }
+
+    //unpack += struct_field + "(uK)" + " = " + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + nl;
+
+
     switch (vector_type.base_type) {
     case BASE_TYPE_STRING: {
-      int bs = 3;
+      // For a string there is a uint32_t length followed by the string bytes:
+      unpack += "idxElemK = idxElemOffPos + " + GenReadUint32("idxElemOffPos") + nl;
+      unpack += "lenString = " + GenReadUint32("idxElemK") + nl;
+      unpack += struct_field + "{uK} = cast(b(idxElemK  + 4:idxElemK + 4 + lenString - 1), \"char\")'" + nl;
+      break;
     }
     case BASE_TYPE_STRUCT: {
-      int bs = 3;
+      //std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
+      //unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
+      //unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
+      unpack += struct_field + "(uK)" + " = " + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + nl;
+      //unpack += "end" + nl;
+      break;
     }
     default: {
       //unpack += GenFieldOffsetName(field_name) + " = idxRT"
-      std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
-      std::string idxField = GenIdxFieldName(field_name);
-      std::string idxVecLen = GenLenFieldName(field_name);
+      //std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
+      //std::string idxField = GenIdxFieldName(field_name);
+      //std::string idxVecLen = GenLenFieldName(field_name);
       std::string octave_type = GetOctaveType(type.element);
       if (octave_type.empty())
         std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
       
-      unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
-      unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
-      unpack += idxVecLen + " = " + GenReadUint32(idxField) + nl;
+      //unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
+      //unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
+      //unpack += idxVecLen + " = " + GenReadUint32(idxField) + nl;
       unpack += struct_field + " = " + GenTypecast(idxField + " + 4", idxVecLen + "*4 - 1", octave_type) + nl;
+      break;
     }
     }
+    if(bGenForLoop)
+      unpack += "end" + nl;
     return unpack;
   }
 
@@ -398,6 +429,13 @@ class OctaveGenerator : public BaseGenerator {
         std::string struct_field = struct_name + ".(VT.Fields{" + NumToString(K) + "})";
         code_ += GenUnpackStringForField(field.name, struct_field, field.value.type) + nl;
         
+        // In Octave it's important that all the structs in a vector of structs have the same fields,
+        // otherwise there will be errors assigning structs with incompatible fields... .
+        // So if the field is empty put an empty field there
+        if (!is_scalar) {
+          code_ += "else" + nl;
+          code_ += struct_field + " = {}" + nl;
+        }
         code_ += "endif" + nl;
       }
       ++K;
