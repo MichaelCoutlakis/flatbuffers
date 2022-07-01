@@ -33,6 +33,7 @@ namespace flatbuffers {
 namespace octave {
 const std::string nl = "\n";
 const std::string tb = "\t";
+const std::string BufOutline = "BufOutline";
 inline std::string tabs(size_t N)
 {
   std::string s;
@@ -300,6 +301,49 @@ class OctaveGenerator : public BaseGenerator {
     return unpack;
   }
 
+  std::string GenPackVector(const std::string& field_name, const std::string& struct_field, const Type& type)
+  {
+    std::string pack;
+    auto vector_type = type.VectorType();
+
+    //str += "offsOutline(end + 1) = length(BufOutline) - length(BufInline);" + nl;
+    //str += "BufOutline = [BufOutline, WriteString(T." + field_name + ")]" + nl;
+    //str += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
+    //str += "BufInline = [BufInline, uint8([7, 7, 7, 7])];" + nl;
+    //str += "lenInline += 4;" + nl;
+
+
+    /* There will be outline data: */
+    pack += "offsOutline(end + 1) = length(BufOutline) - length(BufInline)" + nl;
+
+    pack += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
+
+        /* Reserve space where the offset to the vector will be placed: */
+    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])];" + nl;
+
+    
+    //pack += "lenInline += 4;" + nl;
+
+    switch(vector_type.base_type) {
+    case BASE_TYPE_STRING: {
+      return "Warning: \"Unhandled GenPackStringForField for field " + field_name + "\"";
+    }
+    default: {
+      std::string octave_type = GetOctaveType(type.element);
+      if(octave_type.empty())
+        std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
+
+      // Pack the vector number of elements:
+      pack += "Bytes = WriteUint32(length(T." + field_name + "));" + nl;
+      // Pack the vector bytes
+      pack += "Bytes = [Bytes, typecast(" + octave_type + "(T." + field_name + "), \"uint8\")];" + nl;
+      pack += BufOutline + " = [" + BufOutline + ", Bytes];" + nl;
+      break;
+    }
+    }
+    return pack;
+  }
+
   std::string GenUnpackStruct(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
     std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
@@ -365,7 +409,7 @@ class OctaveGenerator : public BaseGenerator {
     if (IsScalar(type.base_type))
       return GenPackStringBasicField(field_name, struct_field, type);
     else if (IsVector(type)) {
-      std::cout << "TODO: " << std::endl;
+      return GenPackVector(field_name, struct_field, type);
     }
     else if (type.base_type == BASE_TYPE_STRING) {
       std::string str;
@@ -549,12 +593,13 @@ class OctaveGenerator : public BaseGenerator {
 
     /* Write the VT: */
     str += "BufVT(1:2) = WriteUint16(lenVT);" + nl;
-    str += "BufVT(3:4) = WriteUint16(4 + lenInline);" + nl;
+    //str += "BufVT(3:4) = WriteUint16(4 + lenInline);" + nl;
+    str += "BufVT(3:4) = WriteUint16(length(BufInline));" + nl;
     str += "for(idxElem = 1:N)" + nl;
     str += "BufVT = [BufVT, WriteUint16(offsVT(idxElem))]" + nl;
     str += "end" + nl;
 
-    /* Write the VTO: */
+    /* Write the VTO: We're not treating re-useable VT here. Just offset it from the RT by the VT length */
     str += "BufInline(1:4) = WriteInt32(length(BufVT));" + nl;
     /* Write the size prefix and RTO: */
     str += "lenInner = length(BufInline) + length(BufVT)" + nl;
@@ -563,7 +608,7 @@ class OctaveGenerator : public BaseGenerator {
     str += "lenPad = 4 - r;" + nl;
     str += "end" + nl;
     str += "offRT = 4 + lenPad + length(BufVT)" + nl;
-    str += "B = [WriteUint32(offRT), BufVT, BufInline, BufOutline]" + nl;
+    str += "B = [WriteUint32(offRT), zeros(1, lenPad), BufVT, BufInline, BufOutline]" + nl;
     /* Write the outline data */
 
     /* Combine the VT, inline and outline data, set the offsets */
