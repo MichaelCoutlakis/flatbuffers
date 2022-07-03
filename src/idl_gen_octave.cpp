@@ -29,30 +29,33 @@ Generate Octave script from the idl / schema:
 #include "flatbuffers/idl.h"
 #include "flatbuffers/util.h"
 
-namespace flatbuffers {
-namespace octave {
+namespace flatbuffers
+{
+namespace octave
+{
 const std::string nl = "\n";
 const std::string tb = "\t";
 const std::string BufOutline = "BufOutline";
 inline std::string tabs(size_t N)
 {
   std::string s;
-  for (size_t n = 0U; n != N; ++n)
+  for(size_t n = 0U; n != N; ++n)
     s += tb;
   return s;
 }
 // Extension of IDLOptions for cpp-generator:
 struct IDLOptionsOctave : public IDLOptions {
   // All fields start with 'oct_' prefix to distuinguish from the base options
-  IDLOptionsOctave(const IDLOptions &opts) : IDLOptions(opts) {}
+  IDLOptionsOctave(const IDLOptions& opts) : IDLOptions(opts) {}
 };
 
 class OctaveGenerator : public BaseGenerator {
- public:
-  OctaveGenerator(const Parser &parser, const std::string &path,
-                  const std::string &file_name, IDLOptionsOctave opts)
-      : BaseGenerator(parser, path, file_name, "", "", "m"), opts_(opts) {
-    static const char *const keywords[] = {
+public:
+  OctaveGenerator(const Parser& parser, const std::string& path,
+    const std::string& file_name, IDLOptionsOctave opts)
+    : BaseGenerator(parser, path, file_name, "", "", "m"), opts_(opts)
+  {
+    static const char* const keywords[] = {
       "case",
       "do",
       "for",
@@ -62,12 +65,13 @@ class OctaveGenerator : public BaseGenerator {
       "while",
       nullptr,
     };
-    for (auto kw = keywords; *kw; kw++) keywords_.insert(*kw);
+    for(auto kw = keywords; *kw; kw++) keywords_.insert(*kw);
   }
   // Iterate through all the definitions we haven't generated code for and
   // output them to a single file.
-  bool generate() override {
-    //code_.Clear();
+  bool generate() override
+  {
+//code_.Clear();
     code_.clear();
     code_ += "% " + std::string(FlatBuffersGeneratedWarning()) + nl;
 
@@ -87,10 +91,12 @@ class OctaveGenerator : public BaseGenerator {
     //    GenStruct(struct_def);
     //  }
     //}
-    for (auto it = parser_.structs_.vec.begin();
-         it != parser_.structs_.vec.end(); ++it) {
-      const auto &struct_def = **it;
-      if (!struct_def.fixed && !struct_def.generated) {
+    for(auto it = parser_.structs_.vec.begin();
+      it != parser_.structs_.vec.end(); ++it)
+    {
+      const auto& struct_def = **it;
+      if(!struct_def.fixed && !struct_def.generated)
+      {
         SetNameSpace(struct_def.defined_namespace);
         GenTable(struct_def);
       }
@@ -103,8 +109,8 @@ class OctaveGenerator : public BaseGenerator {
     return SaveFile(file_path.c_str(), code_, false);
   }
 
- private:
-  //CodeWriter code_;
+private:
+ //CodeWriter code_;
   std::string code_;
 
   std::unordered_set<std::string> keywords_;
@@ -112,34 +118,38 @@ class OctaveGenerator : public BaseGenerator {
   const IDLOptionsOctave opts_;
 
   // Escape the name if necessary so it doesn't match any of the languages special keywords
-  std::string EscapeKeyword(const std::string& name) const {
+  std::string EscapeKeyword(const std::string& name) const
+  {
     return keywords_.find(name) == keywords_.end() ? name : name + "_";
   }
 
   // Find a suitable name for the type definition
-  std::string Name(const Definition &def) const {
+  std::string Name(const Definition& def) const
+  {
     return EscapeKeyword(def.name);
   }
 
   // Wrap the string in quotation marks
   std::string Quote(const std::string& str) { return "\"" + str + "\""; }
 
-  static std::string NativeName(const std::string &name, const StructDef *sd,
-                                const IDLOptions &opts) {
+  static std::string NativeName(const std::string& name, const StructDef* sd,
+    const IDLOptions& opts)
+  {
     return sd && !sd->fixed ? opts.object_prefix + name + opts.object_suffix
-                            : name;
+      : name;
   }
 
-  std::string GenFieldOffsetName(const FieldDef &field) {
+  std::string GenFieldOffsetName(const FieldDef& field)
+  {
     std::string uname = Name(field);
-    std::transform(uname.begin(), uname.end(), uname.begin(), std::toupper);
+    std::transform(uname.begin(), uname.end(), uname.begin(), [](char c) {return static_cast<char>(std::toupper(c));});
     return "VT_" + uname;
   }
 
   // Generate .m to read the specified number of bytes out of b.
   std::string GenReadBytesAtIndex(const std::string& idx, unsigned num_bytes)
   {
-    if (num_bytes == 0U)
+    if(num_bytes == 0U)
       return "[]";
     return "b(" + idx + ":" + idx + " + " + NumToString(num_bytes - 1U) + ")";
   }
@@ -172,25 +182,28 @@ class OctaveGenerator : public BaseGenerator {
   std::string GenIdxFieldName(const std::string& field_name) { return "idx_" + field_name; }
   std::string GenLenFieldName(const std::string& field_name) { return "len_" + field_name; }
   std::string GenUnpackFunctionName(const std::string& type_name) { return type_name + "_Unpack"; }
-  
+
   std::string GenPackFunctionName(const std::string& type_name) { return type_name + "_Pack"; }
 
   // Generate a member, including default values
-  void GenMember(const FieldDef& field, const std::string& parent) {
-    if (!field.deprecated &&  // Deprecated fields not accessible
-        field.value.type.base_type != BASE_TYPE_UTYPE &&    // What are these actually doing?
-        field.value.type.base_type != BASE_TYPE_UTYPE &&
-        (field.value.type.base_type != BASE_TYPE_VECTOR ||
-         field.value.type.element != BASE_TYPE_UTYPE)) {
-      // In Octave, it's dynamically typed
+  void GenMember(const FieldDef& field, const std::string& parent)
+  {
+    if(!field.deprecated &&  // Deprecated fields not accessible
+      field.value.type.base_type != BASE_TYPE_UTYPE &&    // What are these actually doing?
+      field.value.type.base_type != BASE_TYPE_UTYPE &&
+      (field.value.type.base_type != BASE_TYPE_VECTOR ||
+        field.value.type.element != BASE_TYPE_UTYPE))
+    {
+// In Octave, it's dynamically typed
       std::string member_def = parent + "." + Name(field) + " = [];";
       code_ += member_def;
     }
-  
+
   }
   // Generate the declaration of the table. We don't really need this for Octave
   // as it can be constructed dynamically
-  void GenNativeTable(const StructDef &struct_def) {
+  void GenNativeTable(const StructDef& struct_def)
+  {
     const auto native_name = NativeName(Name(struct_def), &struct_def, opts_);
   }
 
@@ -221,7 +234,7 @@ class OctaveGenerator : public BaseGenerator {
   {
     std::string OctaveType = GetOctaveType(type.base_type);
 
-    if (OctaveType.empty())
+    if(OctaveType.empty())
       std::cout << "Warning: Could not find base type for " << type.base_type << " field name " << field_name << std::endl;
     // Note: The index has already been named as idx_Name_off in GenTable. For inline types it's an absolute index, but generate the same name (with an _off) to match GenTable
     std::string idxField = GenIdxFieldNameOff(field_name);
@@ -231,9 +244,10 @@ class OctaveGenerator : public BaseGenerator {
   /* Return a pack string for a basic type. */
   std::string GenPackStringBasicField(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
+    std::ignore = struct_field;
     std::string OctaveType = GetOctaveType(type.base_type);
 
-    if (OctaveType.empty())
+    if(OctaveType.empty())
       std::cout << "Warning: Could not find base type for " << type.base_type << " field name " << field_name << std::endl;
 
     std::string str;
@@ -256,7 +270,8 @@ class OctaveGenerator : public BaseGenerator {
 
 
     bool bGenForLoop = vector_type.base_type == BASE_TYPE_STRING || vector_type.base_type == BASE_TYPE_STRUCT;
-    if (bGenForLoop) {
+    if(bGenForLoop)
+    {
       unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
       unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
     }
@@ -264,31 +279,35 @@ class OctaveGenerator : public BaseGenerator {
     //unpack += struct_field + "(uK)" + " = " + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + nl;
 
 
-    switch (vector_type.base_type) {
-    case BASE_TYPE_STRING: {
-      // For a string there is a uint32_t length followed by the string bytes:
+    switch(vector_type.base_type)
+    {
+    case BASE_TYPE_STRING:
+    {
+// For a string there is a uint32_t length followed by the string bytes:
       unpack += "idxElemK = idxElemOffPos + " + GenReadUint32("idxElemOffPos") + nl;
       unpack += "lenString = " + GenReadUint32("idxElemK") + nl;
       unpack += struct_field + "{uK} = cast(b(idxElemK  + 4:idxElemK + 4 + lenString - 1), \"char\")'" + nl;
       break;
     }
-    case BASE_TYPE_STRUCT: {
-      //std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
-      //unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
-      //unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
+    case BASE_TYPE_STRUCT:
+    {
+//std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
+//unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
+//unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
       unpack += struct_field + "(uK)" + " = " + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + nl;
       //unpack += "end" + nl;
       break;
     }
-    default: {
-      //unpack += GenFieldOffsetName(field_name) + " = idxRT"
-      //std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
-      //std::string idxField = GenIdxFieldName(field_name);
-      //std::string idxVecLen = GenLenFieldName(field_name);
+    default:
+    {
+//unpack += GenFieldOffsetName(field_name) + " = idxRT"
+//std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
+//std::string idxField = GenIdxFieldName(field_name);
+//std::string idxVecLen = GenLenFieldName(field_name);
       std::string octave_type = GetOctaveType(type.element);
-      if (octave_type.empty())
+      if(octave_type.empty())
         std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
-      
+
       //unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
       //unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
       //unpack += idxVecLen + " = " + GenReadUint32(idxField) + nl;
@@ -303,32 +322,19 @@ class OctaveGenerator : public BaseGenerator {
 
   std::string GenPackVector(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
+    std::ignore = struct_field;
     std::string pack;
     auto vector_type = type.VectorType();
+    pack += GenPackOutline();
 
-    //str += "offsOutline(end + 1) = length(BufOutline) - length(BufInline);" + nl;
-    //str += "BufOutline = [BufOutline, WriteString(T." + field_name + ")]" + nl;
-    //str += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
-    //str += "BufInline = [BufInline, uint8([7, 7, 7, 7])];" + nl;
-    //str += "lenInline += 4;" + nl;
-
-
-    /* There will be outline data: */
-    pack += "offsOutline(end + 1) = length(BufOutline) - length(BufInline)" + nl;
-
-    pack += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
-
-        /* Reserve space where the offset to the vector will be placed: */
-    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])];" + nl;
-
-    
-    //pack += "lenInline += 4;" + nl;
-
-    switch(vector_type.base_type) {
-    case BASE_TYPE_STRING: {
+    switch(vector_type.base_type)
+    {
+    case BASE_TYPE_STRING:
+    {
       return "Warning: \"Unhandled GenPackStringForField for field " + field_name + "\"";
     }
-    default: {
+    default:
+    {
       std::string octave_type = GetOctaveType(type.element);
       if(octave_type.empty())
         std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
@@ -336,7 +342,7 @@ class OctaveGenerator : public BaseGenerator {
       // Pack the vector number of elements:
       pack += "Bytes = WriteUint32(length(T." + field_name + "));" + nl;
       // Pack the vector bytes
-      pack += "Bytes = [Bytes, typecast(" + octave_type + "(T." + field_name + "), \"uint8\")];" + nl;
+      pack += "Bytes = [Bytes, typecast(" + octave_type + "(T." + field_name + "), \"uint8\")(:)'];" + nl;
       pack += BufOutline + " = [" + BufOutline + ", Bytes];" + nl;
       break;
     }
@@ -351,19 +357,35 @@ class OctaveGenerator : public BaseGenerator {
     unpack += struct_field + " = " + GenUnpackFunctionName(struct_name) + "(b, " + GenIdxFieldNameOff(field_name) + ")";
     return unpack;
   }
+  // Use this when data is going to be added to the ouline buffer.
+  [[nodiscard]] std::string GenPackOutline()
+  {
+    std::string pack;
+    /* The offset from the table to the outline data: */
+    pack += "offsOutline(end + 1) = length(BufOutline) - length(BufInline)" + nl;
+    /* Allocate an extra index for the offset as we will have to fill this in with the actual offset */
+    pack += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
+    /* Reserve space where the offset to the vector will be placed in the table (inline data): */
+    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])];" + nl;
+    /* Now the specific outline data can be written: */
+    return pack;
+  }
+  // This is called when we're packing a table which is a member of another table.
   std::string GenPackStruct(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
+    std::ignore = struct_field;
+    std::ignore = type;
     std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
     std::string pack;
-    /* Reserve space where the offset to the root table will be placed: */
-    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])];" + nl;
-    /* There will be outline data: */
-    pack += "offsOutline(end + 1) = length(BufOutline) - length(BufInline)" + nl;
-    /* Call the Pack function*/
-    pack += "BufOutline = [BufOutline, " + GenPackFunctionName(struct_name) + "(T." + field_name + ")]" + nl;
-    /* Reserve space on the inline buffer for the offset to outline root table: */
-    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])]" + nl;
-    pack += "lenInline += 4" + nl;
+
+    pack += GenPackOutline();
+    std::string BytesFieldName = "Bytes" + field_name;
+    pack += BytesFieldName + " = " + GenPackFunctionName(struct_name) + "(T." + field_name + ")" + nl;
+    // The first uint will be the RTO: Erase it as the offset will go inside the parent offset:
+    pack += "RTO" + field_name + " = ReadUint32(" + BytesFieldName + "(1:4));" + nl;
+    //pack += BytesFieldName + " = " + BytesFieldName + "(5:end);" + nl;
+    pack += "offsOutline(end) += RTO" + field_name + " - 4;" + nl;
+    pack += "BufOutline = [BufOutline, " + BytesFieldName + "(5:end)];" + nl;
     return pack;
   }
   // Return an unpack string for the type
@@ -375,16 +397,19 @@ class OctaveGenerator : public BaseGenerator {
   // MsgRx.m_member = ... unpacking code ...
   std::string GenUnpackStringForField(const std::string& field_name, const std::string& struct_field, const Type& type)
   {
-    if (IsScalar(type.base_type))
+    if(IsScalar(type.base_type))
       return GenUnpackStringBasicField(field_name, struct_field, type);
-    else if (IsArray(type)) {
+    else if(IsArray(type))
+    {
       auto element_type = type.VectorType();
     }
-    else if (IsVector(type)) {
+    else if(IsVector(type))
+    {
       return GenUnpackVector(field_name, struct_field, type);
     }
-    else if (type.base_type == BASE_TYPE_STRING) {
-      // index of the string member offset in the table:
+    else if(type.base_type == BASE_TYPE_STRING)
+    {
+// index of the string member offset in the table:
       std::string unpack;
       std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
       std::string idxField = GenIdxFieldName(field_name);
@@ -394,51 +419,60 @@ class OctaveGenerator : public BaseGenerator {
       unpack += struct_field + " = cast(b(" + idxField + " + 4:" + idxField + " + 4 + " + GenLenFieldName(field_name) + " - 1), \"char\")'" + nl;
       return unpack;
     }
-    else if (type.base_type == BASE_TYPE_VECTOR) {
+    else if(type.base_type == BASE_TYPE_VECTOR)
+    {
 
     }
-    else if (type.base_type == BASE_TYPE_STRUCT) {
+    else if(type.base_type == BASE_TYPE_STRUCT)
+    {
       return GenUnpackStruct(field_name, struct_field, type);
     }
-    else {
-      // TODO
+    else
+    {
+// TODO
     }
     return "warning(\"Unhandled GenUnpackStringBasicField\")" + nl;
   }
-  std::string GenPackStringForField(const std::string& field_name, const std::string& struct_field, const Type& type) {
-    if (IsScalar(type.base_type))
+  std::string GenPackStringForField(const std::string& field_name, const std::string& struct_field, const Type& type)
+  {
+    if(IsScalar(type.base_type))
       return GenPackStringBasicField(field_name, struct_field, type);
-    else if (IsVector(type)) {
+    else if(IsVector(type))
+    {
       return GenPackVector(field_name, struct_field, type);
     }
-    else if (type.base_type == BASE_TYPE_STRING) {
+    else if(type.base_type == BASE_TYPE_STRING)
+    {
       std::string str;
-      str += "offsOutline(end + 1) = length(BufOutline) - length(BufInline);" + nl;
+      str += GenPackOutline();
       str += "BufOutline = [BufOutline, WriteString(T." + field_name + ")]" + nl;
-      str += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
-      str += "BufInline = [BufInline, uint8([7, 7, 7, 7])];" + nl;
-      str += "lenInline += 4;" + nl;
       return str;
     }
-    else if (type.base_type == BASE_TYPE_STRUCT) {
+    else if(type.base_type == BASE_TYPE_STRUCT)
+    {
       return GenPackStruct(field_name, struct_field, type);
     }
+    //else if (type.base_type == BASE_TYPE)
     return "Warning: \"Unhandled GenPackStringForField for field " + field_name + "\"";
   }
-  std::string GenOctaveVT(const StructDef& struct_def) {
+  std::string GenOctaveVT(const StructDef& struct_def)
+  {
     std::string vtable;
     // Generate the vtable field ID constants
     // We're going to form an Octave structure called VT with an array for the offsets and a cell array for the names,
     // e.g. VT = struct("Offsets", [4, 12, 20], "Fields", {{"m_Name1"; "m_Name2"; "m_Name3"}});
-    if (struct_def.fields.vec.size() > 0) {
+    if(struct_def.fields.vec.size() > 0)
+    {
       std::string offsets;
       std::string field_names;
 
-      for (auto it = struct_def.fields.vec.begin();
-        it != struct_def.fields.vec.end(); ++it) {
+      for(auto it = struct_def.fields.vec.begin();
+        it != struct_def.fields.vec.end(); ++it)
+      {
         const auto& field = **it;
 
-        if (!field.deprecated) {
+        if(!field.deprecated)
+        {
           offsets += NumToString(field.value.offset) + ", ";
           field_names += "\"" + field.name + "\";";
         }
@@ -447,8 +481,9 @@ class OctaveGenerator : public BaseGenerator {
     }
     return vtable;
   }
-  void GenTable(const StructDef &struct_def) { 
-    GenNativeTable(struct_def); 
+  void GenTable(const StructDef& struct_def)
+  {
+    GenNativeTable(struct_def);
 
     std::string struct_name = NativeName(Name(struct_def), &struct_def, opts_);
     code_ += "function " + struct_name + " = " + GenUnpackFunctionName(struct_name) + "(b, idxBuf)" + nl;
@@ -473,20 +508,23 @@ class OctaveGenerator : public BaseGenerator {
 
     code_ += "FieldOffsets = typecast(b(idxVT + 4:idxVT + 4 + 2*N - 1), \"uint16\")" + nl;
     // Make sure b is bytes:
-  
+
     // Generate the vtable field ID constants
     // We're going to form an Octave structure called VT with an array for the offsets and a cell array for the names,
     // e.g. VT = struct("Offsets", [4, 12, 20], "Fields", {{"m_Name1"; "m_Name2"; "m_Name3"}});
-    if (struct_def.fields.vec.size() > 0) { 
+    if(struct_def.fields.vec.size() > 0)
+    {
       std::string vtable;
       std::string offsets;
       std::string field_names;
 
-      for (auto it = struct_def.fields.vec.begin();
-        it != struct_def.fields.vec.end(); ++it) {
-        const auto &field = **it;
+      for(auto it = struct_def.fields.vec.begin();
+        it != struct_def.fields.vec.end(); ++it)
+      {
+        const auto& field = **it;
 
-        if (!field.deprecated) { 
+        if(!field.deprecated)
+        {
           offsets += NumToString(field.value.offset) + ", ";
           field_names += "\"" + field.name + "\";";
         }
@@ -497,10 +535,12 @@ class OctaveGenerator : public BaseGenerator {
 
     // Now we need to generate unpack code for each member depending on its type:
     size_t K = 1U;    // Note Octave 1 based
-    for (auto it = struct_def.fields.vec.begin(); it != struct_def.fields.vec.end(); ++it) {
+    for(auto it = struct_def.fields.vec.begin(); it != struct_def.fields.vec.end(); ++it)
+    {
       const auto& field = **it;
 
-      if (!field.deprecated) {
+      if(!field.deprecated)
+      {
         const bool is_struct = IsStruct(field.value.type);
         const bool is_scalar = IsScalar(field.value.type.base_type);
 
@@ -511,11 +551,12 @@ class OctaveGenerator : public BaseGenerator {
         // Generate code for where to put the field in the struct that we are unpacking to:
         std::string struct_field = struct_name + ".(VT.Fields{" + NumToString(K) + "})";
         code_ += GenUnpackStringForField(field.name, struct_field, field.value.type) + nl;
-        
+
         // In Octave it's important that all the structs in a vector of structs have the same fields,
         // otherwise there will be errors assigning structs with incompatible fields... .
         // So if the field is empty put an empty field there
-        if (!is_scalar) {
+        if(!is_scalar)
+        {
           code_ += "else" + nl;
           code_ += struct_field + " = {}" + nl;
         }
@@ -529,11 +570,12 @@ class OctaveGenerator : public BaseGenerator {
 
     // Now we can generate code to pack a table:
     GenPackTable(struct_def);
-    /* For a start let's ignore VT repetition. 
+    /* For a start let's ignore VT repetition.
     * Each table will have a VT, followed by the table inline data and then the outline data.
     */
   }
-  void GenPackTable(const StructDef& struct_def) {
+  void GenPackTable(const StructDef& struct_def)
+  {
     std::string str;
     std::string struct_name = NativeName(Name(struct_def), &struct_def, opts_);
     /* Octave function to  unpack the table T. Return packed bytes B. */
@@ -553,13 +595,13 @@ class OctaveGenerator : public BaseGenerator {
     /* Byte length of the VT. */
     str += "lenVT = 4 + N * 2" + nl;
     /* Length of inline data, initialized with the length of the VTO. */
-    str += "lenInline = 4;" + nl;
+    //str += "lenInline = 4;" + nl;
 
     /* Buffer for inline data, reserving space for the VTO: */
     str += "BufInline = WriteInt32(0);" + nl;
     /* VT offsets to each member: */
     str += "offsVT = zeros(1, N);" + nl;
-    /* Indexes into the table to offsets to out of line data. We need to come back here 
+    /* Indexes into the table to offsets to out of line data. We need to come back here
     later once all the inline data has been added to fill these in: */
     str += "idxOffsOutline = [];" + nl;
     /* Offsets to the outline data for the corresponding entry in idxOffsOutline: */
@@ -568,10 +610,12 @@ class OctaveGenerator : public BaseGenerator {
     str += "BufOutline = [];" + nl;
     /* Now we generate pack code for each member depending on its type: */
     size_t K = 1U;    // Note Octave 1 based
-    for (auto it = struct_def.fields.vec.begin(); it != struct_def.fields.vec.end(); ++it) {
+    for(auto it = struct_def.fields.vec.begin(); it != struct_def.fields.vec.end(); ++it)
+    {
       const auto& field = **it;
 
-      if (!field.deprecated) {
+      if(!field.deprecated)
+      {
         const bool is_struct = IsStruct(field.value.type);
         const bool is_scalar = IsScalar(field.value.type.base_type);
 
@@ -586,6 +630,9 @@ class OctaveGenerator : public BaseGenerator {
       ++K;
     }
     /* Fill in the table offsets to outline data: */
+    str += "if(length(idxOffsOutline) ~= length(offsOutline))" + nl;
+    str += "error(\"Mismatched offset lengths for field" + struct_name + "\");" + nl;
+    str += "end" + nl;
     str += "for(k = 1:length(idxOffsOutline))" + nl;
     str += "idx = idxOffsOutline(k);" + nl;
     str += "BufInline(idx:idx + 3) = WriteUint32(offsOutline(k) + length(BufInline));" + nl;
@@ -617,13 +664,16 @@ class OctaveGenerator : public BaseGenerator {
     code_ += str;
   }
   // Set up the correct namespace. Only open / close what is necessary.
-  void SetNameSpace(const Namespace *ns) {
-    // Do nothing for now.
+  void SetNameSpace(const Namespace* ns)
+  {
+// Do nothing for now.
+    std::ignore = ns;
   }
 };
 }  // namespace octave
-bool GenerateOctave(const Parser &parser, const std::string &path,
-                    const std::string &file_name) {
+bool GenerateOctave(const Parser& parser, const std::string& path,
+  const std::string& file_name)
+{
   octave::IDLOptionsOctave opts(parser.opts);
 
   octave::OctaveGenerator generator(parser, path, file_name, opts);
