@@ -327,14 +327,52 @@ private:
     auto vector_type = type.VectorType();
     pack += GenPackOutline();
 
+    bool bGenForLoop = vector_type.base_type == BASE_TYPE_STRING || vector_type.base_type == BASE_TYPE_STRUCT;
+
+    // For tables and strings, we will need to loop through the elents and write each one as a vector element
+    // in the outline data
+    if(bGenForLoop)
+    {
+      // First we need an offset to where the vector is in outline data:
+      pack += "N_" + field_name + " = length(" + struct_field + ");" + nl;
+      // Write the vector size:
+      pack += "BufOutline = [BufOutline, WriteUint32(N_" + field_name + ")];" + nl;
+      // Now, each element in this vector is an offset to where the element (table, string) is in the outline
+      // data. For ease, we will make another outline buffer:
+      pack += "VecOffsets_" + field_name + " = [];" + nl;
+      pack += "VecOutline_" + field_name + " = [];" + nl;
+      
+    }
     switch(vector_type.base_type)
     {
+    case BASE_TYPE_STRUCT:
+    {
+      std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
+      pack += "for k = 1:length(" + struct_field + ")" + nl;
+      pack += "offTo_" + field_name + "_k = N_" + field_name + " * 4 + 4 - 4 * k + length(VecOutline_" + field_name + ");" + nl;
+
+      std::string BytesFieldName = "Bytes_" + field_name + "_k";
+      pack += BytesFieldName + " = " + GenPackFunctionName(struct_name) + "(" + struct_field + "(k));" + nl;
+      // The first uint will be the RTO: Erase it as the offset will go inside the parent offset:
+      pack += "RTO" + field_name + " = ReadUint32(" + BytesFieldName + "(1:4));" + nl;
+      // The offset to the element will now be the vector offset + the root table offset - the erased original root table offset index.
+      pack += "VecOffsets_" + field_name + " = [VecOffsets_" + field_name + ", WriteUint32(offTo_" + field_name + "_k + RTO" + field_name + " - 4)];" + nl;
+      //pack += "VecOutline_" + field_name + " = [VecOutline_" + field_name + ", " + GenPackFunctionName(struct_name) + "(" + struct_field + "(k))];" + nl;
+      pack += "VecOutline_" + field_name + " = [VecOutline_" + field_name + ", " + BytesFieldName + "(5:end)];" + nl;
+      break;
+    }
     case BASE_TYPE_STRING:
     {
-      return "Warning: \"Unhandled GenPackStringForField for field " + field_name + "\"";
+      pack += "for k = 1:length(" + struct_field + ")" + nl;
+      pack += "str_" + field_name + "_k = " + struct_field + "{k};" + nl;
+      pack += "offTo_" + field_name + "_k = N_" + field_name + " * 4 + 4 - 4 * k + length(VecOutline_" + field_name + ");" + nl;
+      pack += "VecOffsets_" + field_name + " = [VecOffsets_" + field_name + ", WriteUint32(offTo_" + field_name + "_k)];" + nl;
+      pack += "VecOutline_" + field_name + " = [VecOutline_" + field_name + ", WriteString(str_" + field_name + "_k)];" + nl;
+      break;
     }
     default:
     {
+      // Works for vectors of plain Octave types
       std::string octave_type = GetOctaveType(type.element);
       if(octave_type.empty())
         std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
@@ -346,6 +384,11 @@ private:
       pack += BufOutline + " = [" + BufOutline + ", Bytes];" + nl;
       break;
     }
+    }
+    if(bGenForLoop)
+    {
+      pack += "end" + nl;
+      pack += "BufOutline = [BufOutline, VecOffsets_" + field_name + ", VecOutline_" + field_name + "];" + nl;
     }
     return pack;
   }
@@ -377,6 +420,8 @@ private:
     std::ignore = type;
     std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
     std::string pack;
+
+    //TODO what if the struct is empty?
 
     pack += GenPackOutline();
     std::string BytesFieldName = "Bytes" + field_name;
@@ -544,7 +589,8 @@ private:
         const bool is_struct = IsStruct(field.value.type);
         const bool is_scalar = IsScalar(field.value.type.base_type);
 
-        code_ += "if(FieldOffsets(" + NumToString(K) + ") ~= 0)" + nl;
+        code_ += "if(N >= " + NumToString(K) + " && FieldOffsets(" + NumToString(K) + ") ~= 0)" + nl;
+         //code_ += "if(FieldOffsets(" + NumToString(K) + ") ~= 0)" + nl;
         //code_ += GenTypeGet()
         // idx_FieldName_off, index of the field name offset in the root table
         code_ += GenIdxFieldNameOff(field.name) + " = idxRT + uint32(FieldOffsets(" + NumToString(K) + "))" + nl;
@@ -559,6 +605,11 @@ private:
         {
           code_ += "else" + nl;
           code_ += struct_field + " = {}" + nl;
+        }
+        else
+        {
+          code_ += "else" + nl;
+          code_ += struct_field + " = 0;" + nl; // When unpacking, if scalar fields were not packed they get the default value
         }
         code_ += "endif" + nl;
       }
@@ -618,14 +669,20 @@ private:
       {
         const bool is_struct = IsStruct(field.value.type);
         const bool is_scalar = IsScalar(field.value.type.base_type);
+        std::string struct_field = "T.(VT.Fields{" + NumToString(K) + "})";
 
-        str += "if(VT.Offsets(" + NumToString(K) + ") ~= 0)" + nl;
+        
+        //str += "if(isfield(T, VT.Fields{" + NumToString(K) + "})" + nl;
+
+        str += "if(isfield(T, VT.Fields{" + NumToString(K) + "}) && !isempty(" + struct_field + "))" + nl;
 
         /* What offset to write into the VT later: */
         str += "offsVT(" + NumToString(K) + ") = length(BufInline);" + nl;
-        std::string struct_field = struct_name + ".(VT.Fields{" + NumToString(K) + "})";
+        //std::string struct_field = struct_name + ".(VT.Fields{" + NumToString(K) + "})";
+        
         str += GenPackStringForField(field.name, struct_field, field.value.type);
         str += "endif" + nl;
+        //str += "endif" + nl;
       }
       ++K;
     }
