@@ -509,12 +509,12 @@ int FlatCompiler::Compile(int argc, const char **argv) {
             Error(std::string("Unable to generate ") +
                   params_.generators[i].lang_name + " for " + filebase);
           }
-          // FIXME for now just put the Octave one here so it's generated after
-          // C++:
-          bool gen_octave = params_.generators[17].generate(
-              *parser.get(), output_path, filebase);
+        //  // FIXME for now just put the Octave one here so it's generated after
+        //  // C++:
+        //  bool gen_octave = params_.generators[17].generate(
+        //      *parser.get(), output_path, filebase);
 
-          if (!gen_octave) Warn("Could not generate Octave script");
+        //  if (!gen_octave) Warn("Could not generate Octave script");
         } else {
 
           if (params_.generators[i].make_rule == nullptr) {

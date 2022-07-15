@@ -111,7 +111,9 @@ int main(int argc, const char *argv[]) {
       flatbuffers::GenerateSwiftGRPC, flatbuffers::IDLOptions::kSwift,
       "Generate Swift files for tables/structs", nullptr },
     { flatbuffers::GenerateOctave, nullptr, "--octave", "GNU Octave", true,
-      nullptr, flatbuffers::IDLOptions::kOctave}
+      nullptr, flatbuffers::IDLOptions::kOctave},
+    { flatbuffers::GenerateMATLAB, nullptr, "--matlab", "MATLAB", true,
+      nullptr, flatbuffers::IDLOptions::kMATLAB }
   };
 
   flatbuffers::FlatCompiler::InitParams params;

@@ -582,6 +582,7 @@ struct IDLOptions {
     kKotlin = 1 << 15,
     kSwift = 1 << 16,
     kOctave = 1 << 17,
+    kMATLAB = 1 << 18,
     kMAX
   };
 
@@ -1076,6 +1077,11 @@ extern bool GenerateFBS(const Parser &parser, const std::string &path,
 // See idl_gen_cpp.
 extern bool GenerateOctave(const Parser &parser, const std::string &path,
                         const std::string &file_name);
+
+// Generate a MATLAB script from the definitions in the Parser object.
+// See idl_gen_cpp.
+extern bool GenerateMATLAB(const Parser &parser, const std::string &path,
+                           const std::string &file_name);
 
 // Generate a make rule for the generated JavaScript or TypeScript code.
 // See idl_gen_js.cpp.
