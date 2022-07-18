@@ -34,6 +34,7 @@ namespace flatbuffers
 namespace matlab
 {
 const std::string nl = "\n";
+const std::string sc = ";";
 const std::string tb = "\t";
 const std::string BufOutline = "BufOutline";
 inline std::string tabs(size_t N)
@@ -262,7 +263,7 @@ private:
       std::cout << "Warning: Could not find base type for " << type.base_type << " field name " << field_name << std::endl;
 
     std::string str;
-    str += "BufInline = [BufInline, typecast(" + OctaveType + "(" + "T." + field_name + "), \'uint8\')]" + nl;
+    str += "BufInline = [BufInline, typecast(" + OctaveType + "(" + "T." + field_name + "), \'uint8\')];" + nl;
     return str;
   }
 
@@ -275,54 +276,39 @@ private:
     std::string idxVecLen = GenLenFieldName(field_name);
     std::string struct_name = type.struct_def ? NativeName(Name(*type.struct_def), type.struct_def, opts_) : "";
 
-    unpack += "offOuter = " + GenReadUint32AtIdx(idxFieldNameOff) + nl;
-    unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
-    unpack += idxVecLen + " = " + GenReadUint32AtIdx(idxField) + nl;
+    unpack += "offOuter = " + GenReadUint32AtIdx(idxFieldNameOff) + sc + nl;
+    unpack += idxField + " = offOuter + " + idxFieldNameOff + sc + nl;
+    unpack += idxVecLen + " = " + GenReadUint32AtIdx(idxField) + sc + nl;
 
 
     bool bGenForLoop = vector_type.base_type == BASE_TYPE_STRING || vector_type.base_type == BASE_TYPE_STRUCT;
     if(bGenForLoop)
     {
       unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
-      unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
+      unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + sc + nl;
     }
-
-    //unpack += struct_field + "(uK)" + " = " + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + nl;
-
-
     switch(vector_type.base_type)
     {
     case BASE_TYPE_STRING:
     {
-// For a string there is a uint32_t length followed by the string bytes:
-      unpack += "idxElemK = idxElemOffPos + " + GenReadUint32AtIdx("idxElemOffPos") + nl;
-      unpack += "lenString = " + GenReadUint32AtIdx("idxElemK") + nl;
-      unpack += struct_field + "{uK} = cast(b(idxElemK  + 4:idxElemK + 4 + lenString - 1), \"char\")'" + nl;
+      // For a string there is a uint32_t length followed by the string bytes:
+      unpack += "idxElemK = idxElemOffPos + " + GenReadUint32AtIdx("idxElemOffPos") + sc + nl;
+      unpack += "lenString = " + GenReadUint32AtIdx("idxElemK") + sc + nl;
+      unpack += struct_field + "{uK} = cast(b(idxElemK  + 4:idxElemK + 4 + lenString - 1), \"char\")'" + sc + nl;
       break;
     }
     case BASE_TYPE_STRUCT:
     {
-//std::string struct_name = NativeName(Name(*type.struct_def), type.struct_def, opts_);
-//unpack += "for(uK = 1:" + idxVecLen + ")" + nl;
-//unpack += "idxElemOffPos = " + idxField + " + 4 * uK" + nl;
-      unpack += struct_field + "(uK)" + " = " + ClassdefName() + "." + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + nl;
-      //unpack += "end" + nl;
+      unpack += struct_field + "(uK)" + " = " + ClassdefName() + "." + GenUnpackFunctionName(struct_name) + "(b, " + "idxElemOffPos" + ")" + sc + nl;
       break;
     }
     default:
     {
-//unpack += GenFieldOffsetName(field_name) + " = idxRT"
-//std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
-//std::string idxField = GenIdxFieldName(field_name);
-//std::string idxVecLen = GenLenFieldName(field_name);
       std::string octave_type = GetOctaveType(type.element);
       if(octave_type.empty())
         std::cout << "Warning: Could not find octave type for " << field_name << std::endl;
 
-      //unpack += "offOuter = " + GenReadUint32(idxFieldNameOff) + nl;
-      //unpack += idxField + " = offOuter + " + idxFieldNameOff + nl;
-      //unpack += idxVecLen + " = " + GenReadUint32(idxField) + nl;
-      unpack += struct_field + " = " + GenTypecast(idxField + " + 4", idxVecLen + "*4 - 1", octave_type) + nl;
+      unpack += struct_field + " = " + GenTypecast(idxField + " + 4", idxVecLen + "*4 - 1", octave_type) + sc + nl;
       break;
     }
     }
@@ -365,7 +351,7 @@ private:
       std::string BytesFieldName = "Bytes_" + field_name + "_k";
       pack += BytesFieldName + " = " + ClassdefName() + "." + GenPackFunctionName(struct_name) + "(" + struct_field + "(k));" + nl;
       // The first uint will be the RTO: Erase it as the offset will go inside the parent offset:
-      pack += "RTO" + field_name + " = " + GenReadUint32(BytesFieldName + "(1:4)") + nl;
+      pack += "RTO" + field_name + " = " + GenReadUint32(BytesFieldName + "(1:4)") + sc + nl;
       // The offset to the element will now be the vector offset + the root table offset - the erased original root table offset index.
       pack += "VecOffsets_" + field_name + " = [VecOffsets_" + field_name + ", " + GenWriteUint32("offTo_" + field_name + "_k + RTO" + field_name + " - 4") + "];" + nl;
       //pack += "VecOutline_" + field_name + " = [VecOutline_" + field_name + ", " + GenPackFunctionName(struct_name) + "(" + struct_field + "(k))];" + nl;
@@ -416,11 +402,11 @@ private:
   {
     std::string pack;
     /* The offset from the table to the outline data: */
-    pack += "offsOutline(end + 1) = length(BufOutline) - length(BufInline)" + nl;
+    pack += "offsOutline(end + 1) = length(BufOutline) - length(BufInline)" + sc + nl;
     /* Allocate an extra index for the offset as we will have to fill this in with the actual offset */
-    pack += "idxOffsOutline(end + 1) = length(BufInline) + 1" + nl;
+    pack += "idxOffsOutline(end + 1) = length(BufInline) + 1" + sc + nl;
     /* Reserve space where the offset to the vector will be placed in the table (inline data): */
-    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])];" + nl;
+    pack += "BufInline = [BufInline, uint8([0, 0, 0, 0])];" + sc + nl;
     /* Now the specific outline data can be written: */
     return pack;
   }
@@ -438,9 +424,7 @@ private:
     std::string BytesFieldName = "Bytes" + field_name;
     pack += BytesFieldName + " = " + ClassdefName() + "." + GenPackFunctionName(struct_name) + "(T." + field_name + ")" + nl;
     // The first uint will be the RTO: Erase it as the offset will go inside the parent offset:
-    pack += "RTO" + field_name + " = " + GenReadUint32(BytesFieldName + "(1:4)") + nl;
-    //pack += BytesFieldName + " = " + BytesFieldName + "(5:end);" + nl;
-    //pack += "offsOutline(end) += RTO" + field_name + " - 4;" + nl;
+    pack += "RTO" + field_name + " = " + GenReadUint32(BytesFieldName + "(1:4)") + sc + nl;
     pack += "offsOutline(end) = offsOutline(end) + RTO" + field_name + " - 4;" + nl;
     pack += "BufOutline = [BufOutline, " + BytesFieldName + "(5:end)];" + nl;
     return pack;
@@ -470,15 +454,11 @@ private:
       std::string unpack;
       std::string idxFieldNameOff = GenIdxFieldNameOff(field_name);
       std::string idxField = GenIdxFieldName(field_name);
-      unpack += "offOuter = " + GenReadUint32AtIdx(idxFieldNameOff) + nl;
-      unpack += idxField + " = " + idxFieldNameOff + " + offOuter" + nl;
-      unpack += GenLenFieldName(field_name) + " = " + GenReadUint32AtIdx(idxField) + nl;
-      unpack += struct_field + " = cast(b(" + idxField + " + 4:" + idxField + " + 4 + " + GenLenFieldName(field_name) + " - 1), \"char\")'" + nl;
+      unpack += "offOuter = " + GenReadUint32AtIdx(idxFieldNameOff) + sc + nl;
+      unpack += idxField + " = " + idxFieldNameOff + " + offOuter" + sc + nl;
+      unpack += GenLenFieldName(field_name) + " = " + GenReadUint32AtIdx(idxField) + sc + nl;
+      unpack += struct_field + " = cast(b(" + idxField + " + 4:" + idxField + " + 4 + " + GenLenFieldName(field_name) + " - 1), \"char\")'" + sc + nl;
       return unpack;
-    }
-    else if(type.base_type == BASE_TYPE_VECTOR)
-    {
-
     }
     else if(type.base_type == BASE_TYPE_STRUCT)
     {
@@ -502,7 +482,7 @@ private:
     {
       std::string str;
       str += GenPackOutline();
-      str += "BufOutline = [BufOutline, " + GenWriteString("T." + field_name ) + "]" + nl;
+      str += "BufOutline = [BufOutline, " + GenWriteString("T." + field_name ) + "]" + sc + nl;
       return str;
     }
     else if(type.base_type == BASE_TYPE_STRUCT)
@@ -548,22 +528,22 @@ private:
     // Declare struct (empty)
     code_ += struct_name + " = {};" + nl;
     /* Offset to the root table: */
-    code_ += "offRT = " + GenReadUint32AtIdx("idxBuf") + nl;
+    code_ += "offRT = " + GenReadUint32AtIdx("idxBuf") + sc + nl;
 
     /* Root table offset in Octave's index into the bytes: */
-    code_ += "idxRT = offRT + idxBuf" + nl;
+    code_ += "idxRT = offRT + idxBuf" + sc + nl;
 
     /* Offset to the VT from the RT: */
-    code_ += "offVT = " + GenReadInt32AtIdx("idxRT") + nl;
+    code_ += "offVT = " + GenReadInt32AtIdx("idxRT") + sc + nl;
     /* Start of the vtable in Octave's index: */
-    code_ += "idxVT = int32(idxRT) - offVT" + nl;
+    code_ += "idxVT = int32(idxRT) - offVT" + sc + nl;
     /* Size of the VT: */
-    code_ += "sizeVT = " + GenReadUint16AtIdx("idxVT") + nl;
+    code_ += "sizeVT = " + GenReadUint16AtIdx("idxVT") + sc + nl;
     /* Determine the inline data size and hence the number of fields: */
     //code_ += "sizeInline = " + GenReadUint16("idxVT + 2") + nl;
-    code_ += "N = int32(sizeVT / 2 - 2)" + nl;
+    code_ += "N = int32(sizeVT / 2 - 2)" + sc + nl;
 
-    code_ += "FieldOffsets = typecast(b(idxVT + 4:idxVT + 4 + 2*N - 1), \"uint16\")" + nl;
+    code_ += "FieldOffsets = typecast(b(idxVT + 4:idxVT + 4 + 2*N - 1), \"uint16\")" + sc + nl;
     // Make sure b is bytes:
 
     // Generate the vtable field ID constants
@@ -605,10 +585,10 @@ private:
          //code_ += "if(FieldOffsets(" + NumToString(K) + ") ~= 0)" + nl;
         //code_ += GenTypeGet()
         // idx_FieldName_off, index of the field name offset in the root table
-        code_ += GenIdxFieldNameOff(field.name) + " = idxRT + uint32(FieldOffsets(" + NumToString(K) + "))" + nl;
+        code_ += GenIdxFieldNameOff(field.name) + " = idxRT + uint32(FieldOffsets(" + NumToString(K) + "))" + sc + nl;
         // Generate code for where to put the field in the struct that we are unpacking to:
         std::string struct_field = struct_name + ".(VT.Fields{" + NumToString(K) + "})";
-        code_ += GenUnpackStringForField(field.name, struct_field, field.value.type) + nl;
+        code_ += GenUnpackStringForField(field.name, struct_field, field.value.type) + sc + nl;
 
         // In Octave it's important that all the structs in a vector of structs have the same fields,
         // otherwise there will be errors assigning structs with incompatible fields... .
@@ -616,7 +596,7 @@ private:
         if(!is_scalar)
         {
           code_ += "else" + nl;
-          code_ += struct_field + " = {}" + nl;
+          code_ += struct_field + " = {}" + sc + nl;
         }
         else
         {
@@ -656,7 +636,7 @@ private:
     /* Number of members */
     str += "N = length(VT.Offsets);" + nl;
     /* Byte length of the VT. */
-    str += "lenVT = 4 + N * 2" + nl;
+    str += "lenVT = 4 + N * 2" + sc + nl;
     /* Length of inline data, initialized with the length of the VTO. */
     //str += "lenInline = 4;" + nl;
 
@@ -709,24 +689,23 @@ private:
 
     /* Write the VT: */
     str += "BufVT(1:2) = " + GenWriteUint16("lenVT") + ";" + nl;
-    //str += "BufVT(3:4) = WriteUint16(4 + lenInline);" + nl;
-    str += "BufVT(3:4) = " + GenWriteUint16("length(BufInline)") + nl;
+    str += "BufVT(3:4) = " + GenWriteUint16("length(BufInline)") + sc + nl;
     str += "for(idxElem = 1:N)" + nl;
-    str += "BufVT = [BufVT, " + GenWriteUint16("offsVT(idxElem)") + "]" + nl;
+    str += "BufVT = [BufVT, " + GenWriteUint16("offsVT(idxElem)") + "]" + sc + nl;
     str += "end" + nl;
 
     /* Write the VTO: We're not treating re-useable VT here. Just offset it from the RT by the VT length */
     str += "BufInline(1:4) = " + GenWriteInt32("length(BufVT)") + ";" + nl;
     /* Write the size prefix and RTO: */
-    str += "lenInner = length(BufInline) + length(BufVT)" + nl;
+    str += "lenInner = length(BufInline) + length(BufVT)" + sc + nl;
     str += "lenPad = 0;" + nl;
-    str += "r = rem(lenInner, 4)" + nl;
+    str += "r = rem(lenInner, 4)" + sc + nl;
     str += "if(r ~= 0)" + nl;
     //str += "if((r = rem(lenInner, 4)) ~= 0)" + nl;
     str += "lenPad = 4 - r;" + nl;
     str += "end" + nl;
-    str += "offRT = 4 + lenPad + length(BufVT)" + nl;
-    str += "B = [" + GenWriteUint32("offRT") + ", zeros(1, lenPad), BufVT, BufInline, BufOutline]" + nl;
+    str += "offRT = 4 + lenPad + length(BufVT)" + sc + nl;
+    str += "B = [" + GenWriteUint32("offRT") + ", zeros(1, lenPad), BufVT, BufInline, BufOutline]" + sc + nl;
     /* Write the outline data */
 
     /* Combine the VT, inline and outline data, set the offsets */
